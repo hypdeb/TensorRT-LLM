@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include "tensorrt_llm/kernels/decoderMaskedMultiheadAttention/decoderXQAImplJIT/kernelUtils.h"
+#include "tensorrt_llm/common/logger.h"
 #include "tensorrt_llm/common/utils.h"
 #include "tensorrt_llm/kernels/multiHeadAttentionCommon.h"
 #include <list>
@@ -34,22 +35,27 @@ bool supportConfigCommon(XQAParams const& xqaParams, bool forConfigurePlugin)
 {
     if (xqaParams.unidirectional != 1)
     {
+        TLLM_LOG_DEBUG("unidirectional != 1");
         return false;
     }
     if (xqaParams.mask_type != tensorrt_llm::kernels::AttentionMaskType::CAUSAL)
     {
+        TLLM_LOG_DEBUG("mask_type != CAUSAL");
         return false;
     }
     if (xqaParams.cross_attention)
     {
+        TLLM_LOG_DEBUG("cross_attention");
         return false;
     }
     if (xqaParams.position_shift_enabled || xqaParams.sink_token_length > 0)
     {
+        TLLM_LOG_DEBUG("position_shift_enabled || sink_token_length > 0");
         return false;
     }
     if (xqaParams.num_kv_heads != 0 && xqaParams.num_q_heads % xqaParams.num_kv_heads != 0)
     {
+        TLLM_LOG_DEBUG("num_kv_heads != 0 && num_q_heads % num_kv_heads != 0");
         return false;
     }
     bool const is_vanilla_mha = !xqaParams.multi_query_tokens
@@ -57,11 +63,13 @@ bool supportConfigCommon(XQAParams const& xqaParams, bool forConfigurePlugin)
     if (is_vanilla_mha && xqaParams.beam_width == 1)
     {
         // Do not use XQA kernel for vanilla MHA case for performance reasons.
+        TLLM_LOG_DEBUG("is_vanilla_mha && beam_width == 1");
         return false;
     }
     if (is_vanilla_mha && xqaParams.head_size <= 128)
     {
         // TODO: remove this when the kernel bug for num_kv_heads <= 128 gets fixed.
+        TLLM_LOG_DEBUG("num_kv_heads <= 128");
         return false;
     }
     if (!contains({PositionEmbeddingType::kROPE_GPTJ, PositionEmbeddingType::kROPE_GPT_NEOX,
@@ -69,11 +77,13 @@ bool supportConfigCommon(XQAParams const& xqaParams, bool forConfigurePlugin)
                       PositionEmbeddingType::kLEARNED_ABSOLUTE, PositionEmbeddingType::kYARN},
             xqaParams.position_embedding_type))
     {
+        TLLM_LOG_DEBUG("position_embedding_type not supported");
         return false;
     }
     if (xqaParams.chunked_attention_size != INT_MAX)
     {
         // TODO: chunked attention is not supported yet.
+        TLLM_LOG_DEBUG("chunked_attention_size != INT_MAX");
         return false;
     }
     return true;
@@ -89,33 +99,41 @@ bool supportConfigQGMMA(XQAParams const& xqaParams, int SM, bool forConfigurePlu
     }
     if (SM != kSM_90)
     {
+        TLLM_LOG_DEBUG("SM != kSM_90");
         return false;
     }
     if (!contains({DATA_TYPE_FP16, DATA_TYPE_BF16}, xqaParams.data_type))
     {
+        TLLM_LOG_DEBUG("!contains({DATA_TYPE_FP16, DATA_TYPE_BF16}, xqaParams.data_type)");
         return false;
     }
     if (xqaParams.kv_cache_data_type != DATA_TYPE_E4M3)
     {
+        TLLM_LOG_DEBUG("xqaParams.kv_cache_data_type != DATA_TYPE_E4M3");
         return false;
     }
     if (xqaParams.beam_width != 1)
     {
+        TLLM_LOG_DEBUG("xqaParams.beam_width != 1");
         return false;
     }
     if (xqaParams.head_size % 16 != 0 || xqaParams.head_size < 16 || xqaParams.head_size > 256)
     {
+        TLLM_LOG_DEBUG("xqaParams.head_size % 16 != 0 || xqaParams.head_size < 16 || xqaParams.head_size > 256");
         return false;
     }
     int32_t head_grp_size = xqaParams.num_kv_heads == 0 ? 1 : xqaParams.num_q_heads / xqaParams.num_kv_heads;
     if (head_grp_size * xqaParams.beam_width > 32)
     {
+        TLLM_LOG_DEBUG("head_grp_size * xqaParams.beam_width > 32");
         return false;
     }
     if (xqaParams.paged_kv_cache && !contains({8, 16, 32, 64, 128}, xqaParams.tokens_per_block))
     {
+        TLLM_LOG_DEBUG("!contains({8, 16, 32, 64, 128}, xqaParams.tokens_per_block)");
         return false;
     }
+    TLLM_LOG_DEBUG("supportConfigQGMMA: true");
     return true;
 }
 
